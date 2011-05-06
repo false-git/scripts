@@ -1,0 +1,10 @@
+# photocp.plの設定ファイル
+
+# iPhoto ライブラリのあるディレクトリ。
+source_library: /Users/false/Pictures/iPhoto Library
+# 画像の移動先
+picture_master: /Users/false/tmp/master
+# 縮小画像の移動先
+picture_preview: /Users/false/tmp/preview
+# 動画の移動先
+movie_master: /Users/false/tmp/movie
