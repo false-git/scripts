@@ -1,6 +1,37 @@
 #!/usr/bin/env perl
+# $Id$
+
+=encoding utf-8
+
+=head1 スクリプト名
+
+photocp.pl
+
+=head1 概要
+
+iPhotoのライブラリディレクトリから、写真や動画を別ディレクトリにコピーする
+スクリプト。
+
+=head1 使用方法
+
+このスクリプトと同じディレクトリに photocp.yaml ファイルを置いて、各ディレクト
+リのパスを設定します。
+photocp.yaml-dist をコピーして修正してください。
+source_library: iPhotoのライブラリがあるディレクトリ
+picture_master: 元画像をコピーするディレクトリ
+picture_preview: 縮小画像をコピーするディレクトリ
+movie_master: 動画をコピーするディレクトリ
+
+photocp.pl を実行すると、前回実行した後にiPhotoに追加されたファイルをコピーしま
+す。
+コピー済みかどうかの判断は、iPhotoライブラリディレクトリに photocp.last と言う
+ファイルを置いて管理しているので、動作がおかしいと思ったら、このファイルを確認
+してください。
+
+=cut
 
 use strict;
+use warnings;
 use Image::Magick;
 use Image::ExifTool;
 use File::Copy;
@@ -21,7 +52,7 @@ my $DST_MOVIE = $conf->{movie_master};
 
 my $LAST = "$SRC_LIBRARY/photocp.last";
 
-sub getSources {
+sub get_sources {
     my $root = shift;
     my $subdir = shift;
     my $lastfile = shift;
@@ -33,7 +64,7 @@ sub getSources {
     foreach my $file (sort @list) {
 	next if ($file =~ /^\.\.?$/);
 	if (-d "$root$subdir/$file") {
-	    push @result, getSources($root, "$subdir/$file", $lastfile);
+	    push @result, get_sources($root, "$subdir/$file", $lastfile);
 	} else {
 	    if ($lastfile lt "$subdir/$file") {
 		push @result, "$subdir/$file";
@@ -43,7 +74,7 @@ sub getSources {
     return @result;
 }
 
-sub getYmd {
+sub get_ymd {
     my $file = shift;
     my ($y, $m, $d);
     my $exif = new Image::ExifTool;
@@ -57,7 +88,7 @@ sub getYmd {
     return ($y, $m, $d);
 }
 
-sub getNextFile {
+sub get_nextfile {
     my $path = shift;
     my $prefix = shift;
     my $ext = shift;
@@ -78,20 +109,20 @@ if (-f $LAST) {
     close($fh);
 }
 
-my @r = getSources($MASTER, "", $lastfile);
+my @r = get_sources($MASTER, "", $lastfile);
 my $im = Image::Magick -> new;
 
 foreach my $file (@r) {
     print "$file...";
     my $sourcefile = "$MASTER$file";
-    my ($y, $m, $d) = getYmd($sourcefile);
+    my ($y, $m, $d) = get_ymd($sourcefile);
     my $stat = stat($sourcefile);
     if ($file =~ /(\.jpg|\.png)$/i) {
 	my $ext = $1;
 	my $subdir = sprintf("/%04d/%04d%02d/%04d%02d%02d", $y, $y, $m, $y, $m, $d);
 	my $prefix = sprintf("pic%04d%02d%02d-", $y, $m, $d);
 	mkpath("$DST_PIC_MASTER$subdir");
-	my $target = getNextFile("$DST_PIC_MASTER$subdir", $prefix, $ext);
+	my $target = get_nextfile("$DST_PIC_MASTER$subdir", $prefix, $ext);
 	my $destinationfile = "$DST_PIC_MASTER$subdir/$target";
 	my $ret = copy($sourcefile, $destinationfile);
 	if (! defined $ret) {
@@ -116,7 +147,7 @@ foreach my $file (@r) {
 	my $subdir = sprintf("/%04d/%04d%02d", $y, $y, $m);
 	my $prefix = sprintf("mov%04d%02d%02d-", $y, $m, $d);
 	mkpath("$DST_MOVIE$subdir");
-	my $target = getNextFile("$DST_MOVIE$subdir", $prefix, $ext);
+	my $target = get_nextfile("$DST_MOVIE$subdir", $prefix, $ext);
 	my $destinationfile = "$DST_MOVIE$subdir/$target";
 	my $ret = copy($sourcefile, $destinationfile);
 	if (! defined $ret) {
