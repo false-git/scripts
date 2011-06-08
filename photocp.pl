@@ -32,6 +32,7 @@ photocp.pl を実行すると、前回実行した後にiPhotoに追加された
 
 use strict;
 use warnings;
+use utf8;
 use Image::Magick;
 use Image::ExifTool;
 use File::Copy;
