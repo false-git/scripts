@@ -29,8 +29,15 @@ mkzip() {
     cd ..
 }
 
+for i in *.zip
+do
+    unzip -O cp932 $i
+done
+
 for i in *
 do
-    mkzip "$i"
+    if [ -d "$i" ]; then
+	mkzip "$i"
+    fi
 done
 
