@@ -113,6 +113,8 @@ if (-f $LAST) {
 my @r = get_sources($MASTER, "", $lastfile);
 my $im = Image::Magick -> new;
 
+umask 0;
+
 foreach my $file (@r) {
     print "$file...";
     my $sourcefile = "$MASTER$file";
@@ -143,7 +145,7 @@ foreach my $file (@r) {
 	@$im = ();
 	utime($stat->atime, $stat->mtime, $destinationfile);
 	print "done";
-    } elsif ($file =~ /(\.mov)$/i) {
+    } elsif ($file =~ /(\.mov|\.mp4)$/i) {
 	my $ext = $1;
 	my $subdir = sprintf("/%04d/%04d%02d", $y, $y, $m);
 	my $prefix = sprintf("mov%04d%02d%02d-", $y, $m, $d);
