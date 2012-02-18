@@ -35,6 +35,7 @@ use warnings;
 use utf8;
 use Image::Magick;
 use Image::ExifTool;
+use File::Basename;
 use File::Copy;
 use File::Path;
 use File::stat;
@@ -68,25 +69,25 @@ sub get_sources {
 	    push @result, get_sources($root, "$subdir/$file", $lastfile);
 	} else {
 	    if ($lastfile lt "$subdir/$file") {
-		push @result, "$subdir/$file";
+		push @result, ["$subdir/$file", get_time("$root$subdir/$file")];
 	    }
 	}
     }
     return @result;
 }
 
-sub get_ymd {
+sub get_time {
     my $file = shift;
-    my ($y, $m, $d);
+    my ($y, $m, $d, $H, $M, $S);
     my $exif = new Image::ExifTool;
     my $info = $exif->ImageInfo($file);
     my $value = $info->{'DateTimeOriginal'} // $info->{'CreateDate'} // $info->{'FileModifyDate'};
-    if ($value =~ /(\d{4})[:\/-](\d{2})[:\/-](\d{2})/) {
-	($y, $m, $d) = ($1, $2, $3);
+    if ($value =~ /(\d{4})[:\/-](\d{2})[:\/-](\d{2}).(\d{2}):(\d{2}):(\d{2})/) {
+	($y, $m, $d, $H, $M, $S) = ($1, $2, $3, $4, $5, $6);
     } else {
 	die($file);
     }
-    return ($y, $m, $d);
+    return [$y, $m, $d, $H, $M, $S];
 }
 
 sub get_nextfile {
@@ -111,14 +112,28 @@ if (-f $LAST) {
 }
 
 my @r = get_sources($MASTER, "", $lastfile);
+# 日時/ファイル名でソート
+@r = sort {
+    for (my $i = 0; $i < 6; $i++) {
+	my $cmp = $a->[1][$i] <=> $b->[1][$i];
+	if ($cmp != 0) {
+	    return $cmp;
+	}
+    }
+    return basename($a->[0]) cmp basename($b->[0]);
+} @r;
+
 my $im = Image::Magick -> new;
 
 umask 0;
 
-foreach my $file (@r) {
+$| = 1; # buffering off
+
+foreach my $file_a (@r) {
+    my $file = $file_a->[0];
     print "$file...";
     my $sourcefile = "$MASTER$file";
-    my ($y, $m, $d) = get_ymd($sourcefile);
+    my ($y, $m, $d) = ($file_a->[1][0], $file_a->[1][1], $file_a->[1][2]);
     my $stat = stat($sourcefile);
     if ($file =~ /(\.jpg|\.png)$/i) {
 	my $ext = $1;
@@ -144,7 +159,7 @@ foreach my $file (@r) {
 	$im->Write($destinationfile);
 	@$im = ();
 	utime($stat->atime, $stat->mtime, $destinationfile);
-	print "done";
+	print "$subdir/$target";
     } elsif ($file =~ /(\.mov|\.mp4)$/i) {
 	my $ext = $1;
 	my $subdir = sprintf("/%04d/%04d%02d", $y, $y, $m);
@@ -158,7 +173,7 @@ foreach my $file (@r) {
 	    next;
 	}
 	utime($stat->atime, $stat->mtime, $destinationfile);
-	print "done";
+	print "$subdir/$target";
     } else {
 	print "not supported yet.\n";
 	next;
