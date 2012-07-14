@@ -103,6 +103,28 @@ sub get_nextfile {
     }
 }
 
+sub find_preview {
+    my $master = shift;
+    my $preview = shift;
+    if (!-e $preview) {
+	# iPhotoのPreviewsディレクトリの構成変更?に対応
+	my ($previewfile, $previewdir, $ext) = fileparse($preview);
+	my $dh;
+	opendir ($dh, $previewdir) or die($!);
+	my @list = readdir($dh);
+	closedir($dh);
+	foreach my $dir (@list) {
+	    # 実際には拡張子の大文字小文字が違うが、HSFSでは大文字小文字を区別しないためか、-e が true を返すのでこれでいいことにする。
+	    if (-e "$previewdir$dir/$previewfile") {
+		# 複数のファイルが存在する可能性が考えられるが、たぶんないものとして最初に見つかったものを返す。
+		return "$previewdir$dir/$previewfile";
+	    }
+	}
+    }
+    # 見つからなかったらmaster
+    return $master;
+}
+
 my $lastfile;
 
 if (-f $LAST) {
@@ -148,10 +170,7 @@ foreach my $file_a (@r) {
 	    next;
 	}
 	utime($stat->atime, $stat->mtime, $destinationfile);
-	my $preview = "$PREVIEW$file";
-	if (!-e $preview) {
-	    $preview = "$MASTER$file";
-	}
+	my $preview = find_preview("$MASTER$file", "$PREVIEW$file");
 	$destinationfile = "$DST_PIC_PREVIEW$subdir/$target";
 	mkpath("$DST_PIC_PREVIEW$subdir");
 	$im->Read($preview);;
