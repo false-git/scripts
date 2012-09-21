@@ -110,7 +110,8 @@ sub find_preview {
 	# iPhotoのPreviewsディレクトリの構成変更?に対応
 	my ($previewfile, $previewdir, $ext) = fileparse($preview);
 	my $dh;
-	opendir ($dh, $previewdir) or die($!);
+	# 共有フォトストリームができてから? MastersにあってPreviewsにないディレクトリがあるので対応
+	opendir ($dh, $previewdir) or return $master;
 	my @list = readdir($dh);
 	closedir($dh);
 	foreach my $dir (@list) {
