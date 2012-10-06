@@ -24,9 +24,7 @@ movie_master: 動画をコピーするディレクトリ
 
 photocp.pl を実行すると、前回実行した後にiPhotoに追加されたファイルをコピーしま
 す。
-コピー済みかどうかの判断は、iPhotoライブラリディレクトリに photocp.last と言う
-ファイルを置いて管理しているので、動作がおかしいと思ったら、このファイルを確認
-してください。
+コピー済みかどうかの判断は、ファイルのsha1をDBに保存して比較しているので、DBI と DBD::SQLite が使える必要があります。MacPortsであれば、port install p5-dbd-sqlite でインストールされます。
 
 =cut
 
@@ -41,6 +39,8 @@ use File::Path;
 use File::stat;
 use YAML::XS;
 use FindBin;
+use DBI;
+use Digest::file qw(digest_file_base64);
 
 my $conf = YAML::XS::LoadFile($FindBin::Bin . "/photocp.yaml");
 
@@ -52,12 +52,13 @@ my $DST_PIC_MASTER = $conf->{picture_master};
 my $DST_PIC_PREVIEW = $conf->{picture_preview};
 my $DST_MOVIE = $conf->{movie_master};
 
-my $LAST = "$SRC_LIBRARY/photocp.last";
+my $LASTDB = "$SRC_LIBRARY/photocp.db";
 
 sub get_sources {
     my $root = shift;
     my $subdir = shift;
     my $lastfile = shift;
+    my $dbh = shift;
     my $dh;
     my @result;
     opendir($dh, "$root$subdir") or die($!);
@@ -66,10 +67,16 @@ sub get_sources {
     foreach my $file (sort @list) {
 	next if ($file =~ /^\.\.?$/);
 	if (-d "$root$subdir/$file") {
-	    push @result, get_sources($root, "$subdir/$file", $lastfile);
+	    push @result, get_sources($root, "$subdir/$file", $lastfile, $dbh);
 	} else {
 	    if ($lastfile lt "$subdir/$file") {
-		push @result, ["$subdir/$file", get_time("$root$subdir/$file")];
+		my $sha1 = digest_file_base64("$root$subdir/$file", "SHA-1");
+		my @rows = $dbh->selectrow_array("select filepath from photo_hash where hashcode = ?", undef, ($sha1));
+		if (!@rows) {
+		    my $sth = $dbh->prepare("insert into photo_hash values (?, ?)");
+		    $sth->execute(("$subdir/$file", $sha1));
+		    push @result, ["$subdir/$file", get_time("$root$subdir/$file")];
+		}
 	    }
 	}
     }
@@ -126,15 +133,19 @@ sub find_preview {
     return $master;
 }
 
-my $lastfile;
+my $lastfile = "";
 
-if (-f $LAST) {
-    open(my $fh, "<", $LAST) or die($!);
-    $lastfile = <$fh>;
-    close($fh);
+my $dbh = DBI->connect("dbi:SQLite:dbname=$LASTDB");
+if (!$dbh->tables('', '%', 'photo_hash')) {
+    $dbh->do("create table photo_hash (filepath, hashcode)");
+    $dbh->do("create table lastfile (filepath)");
+    $dbh->do("insert into lastfile values ('')");
+} else {
+    my @lastfiles = $dbh->selectrow_array("select filepath from lastfile");
+    $lastfile = $lastfiles[0];
 }
 
-my @r = get_sources($MASTER, "", $lastfile);
+my @r = get_sources($MASTER, "", $lastfile, $dbh);
 # 日時/ファイル名でソート
 @r = sort {
     for (my $i = 0; $i < 6; $i++) {
@@ -202,6 +213,7 @@ foreach my $file_a (@r) {
     $lastfile = $file;
 }
 
-open(my $fh, ">", $LAST) or die($!);
-print $fh "$lastfile";
-close($fh);
+my $sth = $dbh->prepare("update lastfile set filepath = ?");
+$sth->execute(($lastfile));
+
+$dbh->disconnect;
